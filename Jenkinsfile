@@ -45,8 +45,8 @@ pipeline {
                 dir ('terraform') {
                     sh "terraform init"
                     sh "terraform apply --auto-approve"
-                    EC2_PUBLIC_IP = sh (
-                        script: "terraform output ec2_public_ip",
+                    env.EC2_PUBLIC_IP = sh (
+                        script: "terraform output -raw ec2_public_ip",
                         returnStdout: true
                     ).trim()
                 }
@@ -59,7 +59,7 @@ pipeline {
             }
             steps {
                 script {
-                    echoc"waiting initialization"
+                    echo"waiting initialization"
                     sleep(time: 90, unit: "SECONDS")
 
                     echo 'deploying docker image to EC2...'
