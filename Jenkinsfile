@@ -27,7 +27,6 @@ pipeline {
                 }
             }
         }
-        
         stage('build image') {
             steps {
                 script {
@@ -39,21 +38,40 @@ pipeline {
             }
         } 
         stage("provision server" ) {
-          // tf provision server
-          "sh terraform init"
+            environment {
+                AWS_ACCESS_KEY_ID = credentials('jenkins_aws_access_key_id')
+                AWS_ACCESS_SECRET_KEY = credentials('jenkins_aws_access_secret_key')
+                TF_VAR_env_prefix = 'test'
+            }
+          steps {
+            script {
+                dir ('terraform') {
+                    sh "terraform init"
+                    sh "terraform apply --auto-approve"
+                    EC2_PUBLIC_IP = sh (
+                        script: "terraform output ec2_public_ip",
+                        returnStdout: true
+                    ).trim()
+                }
+            }
+          }
         }
         
         stage('deploy') {
             steps {
                 script {
+                    echoc"waiting initialization"
+                    sleep(time: 90, unit: "SECONDS")
+
                     echo 'deploying docker image to EC2...'
+                    echo "${EC2_PUBLIC_IP}"
 
                     def shellCmd = "bash ./server-cmds.sh ${IMAGE_NAME}"
-                    def ec2Instance = "ec2-user@3.125.50.166"
+                    def ec2Instance = "ec2-user@${EC2_PUBLIC_IP}"
 
-                    sshagent(['ec2-server-key']) {
-                        sh "scp server-cmds.sh ${ec2Instance}:/home/ec2-user"
-                        sh "scp docker-compose.yaml ${ec2Instance}:/home/ec2-user"
+                    sshagent(['server-ssh-key']) {
+                        sh "scp -o StrictHostKeyChecking=no server-cmds.sh ${ec2Instance}:/home/ec2-user"
+                        sh "scp -o StrictHostKeyChecking=no docker-compose.yaml ${ec2Instance}:/home/ec2-user"
                         sh "ssh -o StrictHostKeyChecking=no ${ec2Instance} ${shellCmd}"
                     }
                 }
